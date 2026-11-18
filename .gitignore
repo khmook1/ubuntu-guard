@@ -1,0 +1,26 @@
+# Cargo
+/target/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Local config & secrets
+/config/config.toml
+.env
+*.pem
+*.key
+
+# Packaging artifacts
+/dist/
+*.deb
+*.tar.gz
+*.sha256
+
+# Test / coverage
+/coverage/
+*.profraw
+lcov.info

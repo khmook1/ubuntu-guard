@@ -1,0 +1,30 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+purge)
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl disable server-guard.service >/dev/null 2>&1 || true
+        systemctl daemon-reload || true
+        systemctl reset-failed server-guard.service >/dev/null 2>&1 || true
+    fi
+    rm -f /etc/server-guard/environment
+    # Keep /etc/server-guard/config.toml unless purging (conffile handles removal).
+    rm -rf /var/lib/server-guard
+    if getent passwd server-guard >/dev/null; then
+        deluser --system server-guard >/dev/null 2>&1 || true
+    fi
+    if getent group server-guard >/dev/null; then
+        delgroup --system server-guard >/dev/null 2>&1 || true
+    fi
+    ;;
+remove)
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl daemon-reload || true
+    fi
+    ;;
+esac
+
+#DEBHELPER#
+
+exit 0

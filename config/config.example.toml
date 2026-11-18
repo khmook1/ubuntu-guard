@@ -1,0 +1,20 @@
+# server-guard example configuration
+# Copy to /etc/server-guard/config.toml and adjust values.
+# Auth token: set SERVER_GUARD_API_TOKEN env var or use a restricted secrets file.
+
+[agent]
+# Unique agent identifier. Leave empty to auto-generate on first start.
+id = ""
+log_level = "info"
+
+[api]
+base_url = "https://api.example.com"
+timeout_seconds = 10
+# token is intentionally omitted; inject via SERVER_GUARD_API_TOKEN
+
+[monitor]
+ssh_enabled = true
+
+[heartbeat]
+enabled = true
+interval_seconds = 60

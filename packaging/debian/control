@@ -1,0 +1,16 @@
+Source: server-guard
+Section: admin
+Priority: optional
+Maintainer: server-guard contributors <security@example.com>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.6.2
+Homepage: https://github.com/example/server-guard
+Rules-Requires-Root: no
+
+Package: server-guard
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, adduser
+Description: Lightweight Linux security monitoring agent
+ server-guard monitors SSH authentication events on Ubuntu servers
+ and reports security events to a central API over HTTPS.
+ It runs as a systemd service with minimal privileges.

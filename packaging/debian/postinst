@@ -1,0 +1,104 @@
+#!/bin/sh
+set -e
+
+SERVICE_NAME="server-guard"
+CONFIG_FILE="/etc/server-guard/config.toml"
+SETTINGS_FILE="/etc/server-guard/settings.toml"
+ENV_FILE="/etc/server-guard/environment"
+
+case "$1" in
+configure)
+    if ! getent group server-guard >/dev/null; then
+        addgroup --system server-guard
+    fi
+    if ! getent passwd server-guard >/dev/null; then
+        adduser --system --ingroup server-guard --home /var/lib/server-guard \
+            --no-create-home --shell /usr/sbin/nologin server-guard
+    fi
+
+    # SSH / journald read access
+    if getent group systemd-journal >/dev/null; then
+        adduser server-guard systemd-journal >/dev/null 2>&1 || true
+    fi
+    if getent group adm >/dev/null; then
+        adduser server-guard adm >/dev/null 2>&1 || true
+    fi
+
+    install -d -o server-guard -g server-guard -m 0750 /var/lib/server-guard
+    install -d -o root -g server-guard -m 0750 /etc/server-guard
+
+    if [ -f "$CONFIG_FILE" ]; then
+        chown root:server-guard "$CONFIG_FILE"
+        chmod 0640 "$CONFIG_FILE"
+    fi
+
+    # Locale / webhook settings (created on first install; preserved as conffile).
+    if [ ! -f "$SETTINGS_FILE" ]; then
+        umask 027
+        cat >"$SETTINGS_FILE" <<'EOF'
+# server-guard runtime settings
+# language: en | ko
+[locale]
+language = "en"
+
+# Central server webhook. Empty = monitoring only (no remote delivery).
+webhook_api_url = ""
+EOF
+        chown root:server-guard "$SETTINGS_FILE"
+        chmod 0640 "$SETTINGS_FILE"
+    else
+        chown root:server-guard "$SETTINGS_FILE"
+        chmod 0640 "$SETTINGS_FILE"
+    fi
+
+    if [ ! -f "$ENV_FILE" ]; then
+        umask 027
+        cat >"$ENV_FILE" <<'EOF'
+# Inject secrets here (mode 0640, root:server-guard).
+# SERVER_GUARD_API_TOKEN=
+# SERVER_GUARD_WEBHOOK_API_URL=
+# SERVER_GUARD_LANGUAGE=ko
+EOF
+        chown root:server-guard "$ENV_FILE"
+        chmod 0640 "$ENV_FILE"
+    fi
+
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl daemon-reload || true
+        systemctl enable "$SERVICE_NAME.service" >/dev/null 2>&1 || true
+
+        # Start when webhook URL is set, or legacy API+token is configured.
+        should_start=0
+        if [ -f "$SETTINGS_FILE" ] \
+            && grep -Eq '^[[:space:]]*webhook_api_url[[:space:]]*=[[:space:]]*"https?://.+"' "$SETTINGS_FILE"; then
+            should_start=1
+        fi
+        if [ "$should_start" -eq 0 ] && [ -f "$ENV_FILE" ] \
+            && grep -Eq '^[[:space:]]*SERVER_GUARD_WEBHOOK_API_URL=https?://.+' "$ENV_FILE"; then
+            should_start=1
+        fi
+        if [ "$should_start" -eq 0 ] && [ -f "$CONFIG_FILE" ]; then
+            if grep -Eq '^[[:space:]]*base_url[[:space:]]*=[[:space:]]*"https?://.+"' "$CONFIG_FILE" \
+                && ! grep -Eq 'api\.example\.com' "$CONFIG_FILE"; then
+                if [ -f "$ENV_FILE" ] && grep -Eq '^[[:space:]]*SERVER_GUARD_API_TOKEN=.+' "$ENV_FILE"; then
+                    should_start=1
+                fi
+            fi
+        fi
+
+        if [ "$should_start" -eq 1 ]; then
+            systemctl restart "$SERVICE_NAME.service" >/dev/null 2>&1 || true
+        else
+            echo "server-guard: configuration incomplete; service enabled but not started."
+            echo "  1) Set webhook_api_url in $SETTINGS_FILE"
+            echo "     (or SERVER_GUARD_WEBHOOK_API_URL in $ENV_FILE)"
+            echo "  2) Optionally set language (en|ko) in $SETTINGS_FILE"
+            echo "  3) Run: sudo systemctl start server-guard"
+        fi
+    fi
+    ;;
+esac
+
+#DEBHELPER#
+
+exit 0

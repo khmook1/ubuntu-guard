@@ -1,0 +1,103 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-deb:
+    name: Build .deb (${{ matrix.deb_arch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - deb_arch: amd64
+            rust_target: x86_64-unknown-linux-gnu
+          - deb_arch: arm64
+            rust_target: aarch64-unknown-linux-gnu
+            apt_cross: gcc-aarch64-linux-gnu
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.deb_arch }}
+
+      - name: Install cross linker (arm64)
+        if: matrix.apt_cross != ''
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ matrix.apt_cross }}
+          mkdir -p .cargo
+          cat >> .cargo/config.toml <<'EOF'
+          [target.aarch64-unknown-linux-gnu]
+          linker = "aarch64-linux-gnu-gcc"
+          EOF
+
+      - name: Install packaging tools
+        run: sudo apt-get update && sudo apt-get install -y dpkg-dev binutils
+
+      - name: Build Debian package
+        env:
+          TARGET: ${{ matrix.rust_target }}
+        run: |
+          chmod +x scripts/build-deb.sh
+          ./scripts/build-deb.sh ${{ matrix.deb_arch }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-guard-${{ matrix.deb_arch }}
+          path: |
+            dist/*.deb
+            dist/*.sha256
+
+  publish:
+    name: Publish GitHub Release
+    needs: build-deb
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Collect release assets
+        run: |
+          mkdir -p release-assets
+          find artifacts -type f \( -name '*.deb' -o -name '*.sha256' \) -exec cp {} release-assets/ \;
+          ls -la release-assets
+          # Combined checksum file for convenience
+          (
+            cd release-assets
+            cat *.sha256 > SHA256SUMS
+          )
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release-assets/*.deb
+            release-assets/*.sha256
+            release-assets/SHA256SUMS
+          generate_release_notes: true
+          fail_on_unmatched_files: true

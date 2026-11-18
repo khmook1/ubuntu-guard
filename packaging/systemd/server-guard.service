@@ -1,0 +1,67 @@
+[Unit]
+Description=server-guard security monitoring agent
+Documentation=https://github.com/example/server-guard
+After=network-online.target systemd-journald.service
+Wants=network-online.target
+# Do not block boot if the agent fails to start (e.g. incomplete config).
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=server-guard
+Group=server-guard
+# journal/adm membership is granted via packaging supplementary groups for SSH log read access.
+SupplementaryGroups=systemd-journal adm
+
+ExecStart=/usr/bin/server-guard /etc/server-guard/config.toml
+WorkingDirectory=/var/lib/server-guard
+
+# EnvironmentFile is optional; missing file must not fail the unit.
+EnvironmentFile=-/etc/server-guard/environment
+Environment=RUST_LOG=info
+
+# Configuration problems use exit status 78 (EX_CONFIG) — do not restart forever.
+Restart=on-failure
+RestartPreventExitStatus=78
+RestartSec=5
+TimeoutStopSec=30
+KillMode=mixed
+KillSignal=SIGTERM
+
+# Logging via journald (captured by stdout/stderr)
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=server-guard
+
+# Hardening — grant only what is needed to follow journald and talk HTTPS.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateDevices=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+# Allow reading journal and config; writable state directory only.
+ReadWritePaths=/var/lib/server-guard
+ReadOnlyPaths=/etc/server-guard
+# journald socket / log access
+BindReadOnlyPaths=/run/systemd/journal /var/log/journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,11 @@
+# server-guard runtime settings
+# Installed to /etc/server-guard/settings.toml on package install.
+
+[locale]
+# Log language: en | ko
+language = "en"
+
+# Central server webhook endpoint (HTTPS recommended).
+# When set, the agent POSTs JSON events/heartbeats to this URL.
+# Leave empty to run monitors without remote delivery.
+webhook_api_url = ""
